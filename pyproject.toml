@@ -1,0 +1,45 @@
+[tool.poetry]
+name = "kasa-provisioner"
+version = "0.1.0"
+description = "Offline provisioning and local control of TP-Link Kasa/Tapo smart plugs"
+authors = []
+packages = [{ include = "kasa_provisioner", from = "src" }]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+python-kasa = "^0.9"
+typer = "^0.12"
+click = ">=8.0.0,<8.2.0"
+rich = "^13"
+pydantic = "^2"
+anyio = "^4"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8"
+pytest-asyncio = "^0.24"
+pytest-cov = "^5"
+mypy = "^1.10"
+ruff = "^0.5"
+
+[tool.poetry.scripts]
+kasa-provisioner = "kasa_provisioner.cli.main:app"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "--cov=kasa_provisioner --cov-report=term-missing"
+
+[tool.mypy]
+strict = true
+python_version = "3.12"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
