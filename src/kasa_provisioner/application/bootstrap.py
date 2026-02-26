@@ -11,6 +11,7 @@ Flow:
 import asyncio
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 from kasa_provisioner.domain.exceptions import ProvisioningError
 from kasa_provisioner.domain.models import DeviceInfo, WifiConfig
@@ -38,29 +39,38 @@ class BootstrapUseCase:
     async def run(self, wifi: WifiConfig) -> BootstrapResult:
         logger.info("Connecting to device at %s", self._client.host)
 
+        # get_info is best-effort in AP mode — device may close without responding.
         raw_info = await self._client.get_info()
         device = _parse_device_info(raw_info, self._client.host)
-        logger.info("Device identified: model=%s mac=%s", device.model, device.mac)
+        if device.model:
+            logger.info("Device identified: model=%s mac=%s", device.model, device.mac)
+        else:
+            logger.info(
+                "Device at %s did not return sysinfo (normal in AP mode)",
+                self._client.host,
+            )
 
-        logger.info("Injecting WiFi credentials for SSID=%s", wifi.ssid)
-        response = await self._client.set_wifi(
+        # Send set_stainfo via UDP — the transport the Kasa mobile app uses.
+        logger.info("Injecting WiFi credentials for SSID=%s via UDP", wifi.ssid)
+        await self._client.set_wifi_udp(
             ssid=wifi.ssid,
             password=wifi.password,
             key_type=int(wifi.key_type),
         )
-        _assert_success(response, "set_stainfo")
 
-        logger.info("Credentials sent. Device is joining network. Polling...")
-        # Device will disconnect from AP immediately — give it a moment.
+        logger.info("Credentials sent. Device is joining network...")
         await asyncio.sleep(2.0)
 
         return BootstrapResult(
             device=device,
-            message=f"Device {device.model or 'unknown'} sent to SSID '{wifi.ssid}'. Run 'discover' after rejoining LAN.",
+            message=(
+                f"Device {device.model or 'unknown'} sent to SSID '{wifi.ssid}'."
+                " Run 'discover' after rejoining LAN."
+            ),
         )
 
 
-def _parse_device_info(raw: dict, host: str) -> DeviceInfo:
+def _parse_device_info(raw: dict[str, Any], host: str) -> DeviceInfo:
     sysinfo = raw.get("system", {}).get("get_sysinfo", {})
     return DeviceInfo(
         host=host,
@@ -72,7 +82,7 @@ def _parse_device_info(raw: dict, host: str) -> DeviceInfo:
     )
 
 
-def _assert_success(response: dict, command: str) -> None:
+def _assert_success(response: dict[str, Any], command: str) -> None:
     err_code = (
         response.get("netif", {}).get("set_stainfo", {}).get("err_code")
     )

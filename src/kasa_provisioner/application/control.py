@@ -72,7 +72,11 @@ class ControlUseCase:
                 device = await Device.connect(
                     config=DeviceConfig(
                         host=self._host,
-                        credentials=Credentials(username, password) if (username or password) else None,
+                        credentials=(
+                            Credentials(username, password)
+                            if (username or password)
+                            else None
+                        ),
                     )
                 )
                 try:
@@ -112,7 +116,11 @@ class ControlUseCase:
                 device = await Device.connect(
                     config=DeviceConfig(
                         host=self._host,
-                        credentials=Credentials(username, password) if (username or password) else None,
+                        credentials=(
+                            Credentials(username, password)
+                            if (username or password)
+                            else None
+                        ),
                     )
                 )
                 try:

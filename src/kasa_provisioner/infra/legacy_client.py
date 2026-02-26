@@ -1,10 +1,15 @@
 """
-Legacy TP-Link protocol client (XOR autokey cipher over TCP/9999).
+Legacy TP-Link protocol client (XOR autokey cipher, port 9999).
 
 Protocol reference: https://www.softscheck.com/en/blog/tp-link-reverse-engineering/
 
-Frame format: [4-byte big-endian length][XOR-encoded JSON payload]
+TCP frame: [4-byte big-endian length][XOR-encoded JSON payload]
+UDP frame: [XOR-encoded JSON payload]  (no length prefix)
+
 Cipher: autokey XOR — key starts at 0xAB; each plaintext byte becomes next key.
+
+AP-mode provisioning uses UDP (like the Kasa mobile app).
+LAN control uses TCP (standard python-kasa path).
 """
 
 import asyncio
@@ -50,7 +55,8 @@ def _unpack(frame: bytes) -> dict[str, Any]:
         raise ProvisioningError(f"Malformed response: only {len(frame)} bytes")
     length = struct.unpack(">I", frame[:4])[0]
     payload = frame[4 : 4 + length]
-    return json.loads(_xor_decode(payload))
+    result: dict[str, Any] = json.loads(_xor_decode(payload))
+    return result
 
 
 class LegacyClient:
@@ -67,7 +73,7 @@ class LegacyClient:
                 asyncio.open_connection(self.host, self.port),
                 timeout=_CONNECT_TIMEOUT,
             )
-        except (OSError, asyncio.TimeoutError) as exc:
+        except (TimeoutError, OSError) as exc:
             raise ConnectionError(f"Cannot connect to {self.host}:{self.port}") from exc
 
         try:
@@ -84,7 +90,7 @@ class LegacyClient:
             if not exc.partial:
                 return {}
             raise ProvisioningError(f"Truncated response from {self.host}") from exc
-        except asyncio.TimeoutError as exc:
+        except TimeoutError as exc:
             raise ProvisioningError(f"Read timeout from {self.host}") from exc
         finally:
             writer.close()
@@ -93,10 +99,40 @@ class LegacyClient:
     async def get_info(self) -> dict[str, Any]:
         return await self.send({"system": {"get_sysinfo": {}}})
 
+    async def send_udp(self, command: dict[str, Any]) -> None:
+        """Send a command via UDP (no 4-byte header, no response expected).
+
+        This is the transport used by the Kasa mobile app for AP-mode provisioning.
+        """
+        raw = json.dumps(command, separators=(",", ":")).encode()
+        encoded = _xor_encode(raw)
+
+        transport, _ = await asyncio.get_running_loop().create_datagram_endpoint(
+            asyncio.DatagramProtocol,
+            remote_addr=(self.host, self.port),
+        )
+        try:
+            transport.sendto(encoded)
+        finally:
+            transport.close()
+
     async def set_wifi(self, ssid: str, password: str, key_type: int = 3) -> dict[str, Any]:
-        """Inject WiFi credentials — the core bootstrap command."""
+        """Inject WiFi credentials via TCP (LAN mode)."""
         return await self.send(
             {"netif": {"set_stainfo": {"ssid": ssid, "password": password, "key_type": key_type}}}
+        )
+
+    async def set_wifi_udp(self, ssid: str, password: str, key_type: int = 3) -> None:
+        """Inject WiFi credentials via UDP — required for AP-mode bootstrap.
+
+        Tries the standard ``netif`` namespace first, then falls back to
+        ``smartlife.iot.common.softaponboarding`` (used by some newer devices).
+        """
+        stainfo = {"ssid": ssid, "password": password, "key_type": key_type}
+        await self.send_udp({"netif": {"set_stainfo": stainfo}})
+        await asyncio.sleep(0.5)
+        await self.send_udp(
+            {"smartlife.iot.common.softaponboarding": {"set_stainfo": stainfo}}
         )
 
     async def set_power(self, *, state: bool) -> dict[str, Any]:

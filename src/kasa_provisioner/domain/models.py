@@ -3,7 +3,7 @@
 from enum import StrEnum
 from typing import Annotated
 
-from pydantic import BaseModel, Field, IPvAnyAddress
+from pydantic import BaseModel, Field
 
 
 class ProtocolType(StrEnum):

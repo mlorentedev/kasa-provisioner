@@ -1,11 +1,17 @@
-"""Unit tests for the XOR codec and TCP framing of LegacyClient."""
+"""Unit tests for the XOR codec, TCP framing, and UDP transport of LegacyClient."""
 
 import json
 import struct
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
-from kasa_provisioner.infra.legacy_client import _xor_decode, _xor_encode, _pack, _unpack
+from kasa_provisioner.infra.legacy_client import (
+    LegacyClient,
+    _pack,
+    _unpack,
+    _xor_decode,
+    _xor_encode,
+)
 
 # Known-good vector from the softscheck reverse engineering post
 # "192.168.0.1" discovery — not testing network, only codec correctness
@@ -53,3 +59,44 @@ class TestFraming:
         from kasa_provisioner.domain.exceptions import ProvisioningError
         with pytest.raises(ProvisioningError):
             _unpack(b"\x00\x01")
+
+
+class TestUdpTransport:
+    async def test_send_udp_sends_xor_without_length_header(self) -> None:
+        """UDP frames must NOT include the 4-byte length prefix."""
+        client = LegacyClient("192.168.0.1")
+        command = {"system": {"get_sysinfo": {}}}
+
+        raw = json.dumps(command, separators=(",", ":")).encode()
+        expected_payload = _xor_encode(raw)
+
+        mock_transport = MagicMock()
+        mock_transport.sendto = MagicMock()
+        mock_transport.close = MagicMock()
+
+        async def fake_endpoint(*args, **kwargs):  # type: ignore[no-untyped-def]
+            return mock_transport, None
+
+        with patch("asyncio.get_running_loop") as mock_loop:
+            mock_loop.return_value.create_datagram_endpoint = fake_endpoint
+            await client.send_udp(command)
+
+        mock_transport.sendto.assert_called_once_with(expected_payload)
+        mock_transport.close.assert_called_once()
+
+    async def test_set_wifi_udp_sends_both_namespaces(self) -> None:
+        """set_wifi_udp sends netif first, then softaponboarding fallback."""
+        client = LegacyClient("192.168.0.1")
+        client.send_udp = AsyncMock()  # type: ignore[method-assign]
+
+        await client.set_wifi_udp(ssid="TestNet", password="pass123", key_type=3)
+
+        assert client.send_udp.call_count == 2
+        first_call = client.send_udp.call_args_list[0][0][0]
+        second_call = client.send_udp.call_args_list[1][0][0]
+
+        assert "netif" in first_call
+        assert first_call["netif"]["set_stainfo"]["ssid"] == "TestNet"
+        assert "smartlife.iot.common.softaponboarding" in second_call
+        softonboarding = second_call["smartlife.iot.common.softaponboarding"]
+        assert softonboarding["set_stainfo"]["ssid"] == "TestNet"

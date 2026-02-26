@@ -73,8 +73,12 @@ def bootstrap(
 
 @app.command()
 def discover(
-    username: Annotated[str, typer.Option("--username", help="TP-Link account (for KLAP devices)")] = "",
-    password: Annotated[str, typer.Option("--password", help="TP-Link password (for KLAP devices)")] = "",
+    username: Annotated[
+        str, typer.Option("--username", help="TP-Link account (KLAP)")
+    ] = "",
+    password: Annotated[
+        str, typer.Option("--password", help="TP-Link password (KLAP)")
+    ] = "",
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Discover TP-Link devices on the local network and save registry."""
@@ -95,9 +99,11 @@ def discover(
 def control(
     host: Annotated[str, typer.Argument(help="Device IP address")],
     command: Annotated[str, typer.Argument(help="on | off | toggle")],
-    protocol: Annotated[str, typer.Option("--protocol", help="Protocol: legacy | klap_v1 | klap_v2")] = "legacy",
-    username: Annotated[str, typer.Option("--username", help="KLAP username")] = "",
-    password: Annotated[str, typer.Option("--password", help="KLAP password")] = "",
+    protocol: Annotated[
+        str, typer.Option("--protocol", help="legacy | klap_v1 | klap_v2")
+    ] = "legacy",
+    username: Annotated[str, typer.Option("--username")] = "",
+    password: Annotated[str, typer.Option("--password")] = "",
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Send a power command (on/off/toggle) to a device by IP."""
@@ -129,9 +135,11 @@ def control(
 @app.command()
 def status(
     host: Annotated[str, typer.Argument(help="Device IP address")],
-    protocol: Annotated[str, typer.Option("--protocol", help="Protocol: legacy | klap_v1 | klap_v2")] = "legacy",
-    username: Annotated[str, typer.Option("--username", help="KLAP username")] = "",
-    password: Annotated[str, typer.Option("--password", help="KLAP password")] = "",
+    protocol: Annotated[
+        str, typer.Option("--protocol", help="legacy | klap_v1 | klap_v2")
+    ] = "legacy",
+    username: Annotated[str, typer.Option("--username")] = "",
+    password: Annotated[str, typer.Option("--password")] = "",
     verbose: Annotated[bool, typer.Option("--verbose", "-v")] = False,
 ) -> None:
     """Read the current power state of a device without changing it."""
