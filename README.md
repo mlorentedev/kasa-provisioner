@@ -51,3 +51,7 @@ poetry run pytest          # run tests
 poetry run ruff check .    # lint
 poetry run mypy src        # type check
 ```
+
+## Documentation
+
+Project-bound knowledge lives in [`docs/`](docs/) (docs-as-code): ADRs, runbooks, troubleshooting, and lessons.
